@@ -46,13 +46,20 @@ services:
     # a second language in this repository for no gain: the assertion is "a
     # POST arrived and it mentions Diun", and nc can answer that.
     #
+    # NO -w HERE, DELIBERATELY. A listen timeout counts from the moment nc
+    # starts listening, not from the moment a connection arrives, so a
+    # notification that lands late in the window is cut off part way through
+    # being read: the request line reaches the log and the headers never do.
+    # The loop restarts nc anyway, and the CI step has its own timeout, so the
+    # only thing -w added was a way to truncate the evidence.
+    #
     # Written on ONE line deliberately. A shell pipeline continues across lines
     # only when the `|` ENDS the previous one - a line that begins with `|` is
     # a syntax error. Split across a folded scalar, this loop died instantly,
     # restarted forever, and dropped out of Docker's DNS as it went; Diun then
     # reported "no such host" for the sink, which reads like a network problem
     # and is a shell one.
-    command: ["sh", "-c", "while true; do printf 'HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok' | nc -l -p 9000 -w 5 | tr -d '\r' | sed 's/^/SINK /'; done"]
+    command: ["sh", "-c", "while true; do printf 'HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok' | nc -l -p 9000 | tr -d '\r' | sed 's/^/SINK /'; done"]
     networks:
       - diun-network
     restart: unless-stopped

@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _(no unreleased changes yet)_
 
+## [1.0.1] - 2026-09-11
+
+### Fixed
+
+- **The delivery test could fail on a notification that had arrived
+  perfectly well.** Two races, both in the test rather than in the template.
+
+  The sink listened with `nc -l -w 5`, and that timeout counts from the moment
+  nc starts listening rather than from the moment a connection arrives. A
+  notification landing late in the window was cut off part way through being
+  read: the request line reached the log and the headers never did. The loop
+  restarts nc anyway and the CI step has its own timeout, so the only thing
+  `-w` contributed was a way to truncate the evidence.
+
+  And the step waited for `SINK POST` and then immediately asserted on
+  `SINK Content-Type`. The sink's output reaches the log through a buffered
+  pipeline, so the first line can be visible a moment before the ones that
+  followed it. It now waits for the line it is going to assert on.
+
 ## [1.0.0] - 2026-09-11
 
 First release. A production deployment of Diun, built to the fleet standard
@@ -87,5 +106,6 @@ No Traefik and no certificate: Diun has no web interface.
 - **The healthcheck is a subcommand, not a flag.** `diun healthcheck`;
   `diun --healthcheck` is what people write and it is not a thing.
 
-[Unreleased]: https://github.com/heyvaldemar/diun-docker-compose/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/heyvaldemar/diun-docker-compose/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/heyvaldemar/diun-docker-compose/releases/tag/v1.0.1
 [1.0.0]: https://github.com/heyvaldemar/diun-docker-compose/releases/tag/v1.0.0

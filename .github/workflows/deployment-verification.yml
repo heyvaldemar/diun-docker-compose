@@ -299,13 +299,19 @@ jobs:
         # tests/webhook-sink.yml receives one, and that is the whole assertion.
         run: |
           dc() { docker compose -p "$COMPOSE_PROJECT_NAME" "$@"; }
+          # Wait for the line this step is about to assert on, not for a
+          # different one. The sink's output reaches the log through a
+          # buffered pipeline, so "SINK POST" can be visible a moment before
+          # the headers that followed it are, and a grep fired the instant the
+          # POST line appeared failed on a notification that had arrived
+          # perfectly well.
           # shellcheck disable=SC2016
-          timeout 6m bash -c 'until docker compose -p "$COMPOSE_PROJECT_NAME" logs webhook-sink 2>/dev/null | grep -q "SINK POST"; do
+          timeout 6m bash -c 'until docker compose -p "$COMPOSE_PROJECT_NAME" logs webhook-sink 2>/dev/null | grep -q "SINK Content-Type: application/json"; do
             echo "Waiting for a notification to arrive..."; sleep 10
           done'
           dc logs webhook-sink | grep -m6 "SINK"
-          dc logs webhook-sink | grep -q "SINK Content-Type: application/json" \
-            || { echo "::error::something arrived at the sink but it was not a JSON notification"; exit 1; }
+          dc logs webhook-sink | grep -q "SINK POST" \
+            || { echo "::error::headers arrived at the sink but no request line did"; exit 1; }
           echo "a JSON notification was delivered"
 
       - name: Diun never gets the Docker socket, and the proxy refuses writes
