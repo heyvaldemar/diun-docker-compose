@@ -1,0 +1,85 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+_(no unreleased changes yet)_
+
+## [1.0.0] - 2026-09-11
+
+First release. A production deployment of Diun, built to the fleet standard
+established in
+[keycloak-traefik-letsencrypt-docker-compose](https://github.com/heyvaldemar/keycloak-traefik-letsencrypt-docker-compose).
+
+No Traefik and no certificate: Diun has no web interface.
+
+### Added
+
+- **Diun 4.33 with a read-only Docker socket proxy.** Three images pinned by
+  `tag@sha256:<digest>` in the compose `x-images` block. Diun's job is to read
+  what is running and report on it — it never pulls, recreates or restarts —
+  so it has no business holding a socket that could do any of those, and `:ro`
+  on a socket mount would not stop it. The proxy forwards `CONTAINERS` and
+  `IMAGES` only, with `POST` denied.
+- **A test that a notification actually leaves the building.**
+  `tests/webhook-sink.yml` receives one, and CI asserts it arrived. This is the
+  test nobody writes and the one that matters most here: a notifier that
+  discovers updates and cannot deliver them is, from the outside,
+  indistinguishable from one that found nothing. Both are silent, and silence
+  is what you expect most days.
+- **Watch-by-default, against upstream's own default.** Opt-in per container
+  means a new stack is unwatched until somebody remembers to label it, and
+  nobody remembers — coverage stays at zero for months while the tool reports
+  itself healthy. Watching by default means coverage starts the moment a
+  container does; exclude a noisy one with `diun.enable=false`.
+- **First-check notification off.** With watch-by-default, the first scan
+  discovers everything you run at once, and the alternative empties all of it
+  into your chat in one go. Diun still records them; only real changes notify.
+- **The four labels an exactly-pinned image needs**, documented with the
+  reasoning rather than as a recipe. Digest-watching never reports a new
+  version for an exact pin, because 10.11.12 is not a re-push of 10.11.11 — the
+  pin keeps working and you simply stop hearing about releases.
+- **A backup loop that reads its own archive back before naming it a backup**,
+  an end-to-end suite requiring `diun.db` in the archive by name, a restore
+  script, `update.sh`, `cap_drop: ALL`, resource limits and reservations, and
+  OpenSSF Scorecard.
+
+### Notes
+
+- **`IMAGES` has to be on the proxy's allow-list, and leaving it off fails
+  quietly.** Diun lists containers and then inspects each image to learn its
+  digest. With `CONTAINERS` alone, the listing succeeds, every inspect gets a
+  403, and the log says "No image found" — a stack that is healthy, running and
+  watching nothing. Found by pointing the first draft at a proxy and reading
+  what Diun made of it rather than what the proxy answered. CI asserts the
+  discovery count is greater than zero for exactly this reason.
+- **Diun ignores `DOCKER_HOST`.** Its own setting is
+  `DIUN_PROVIDERS_DOCKER_ENDPOINT`, and a proxy configured the other way is
+  silently bypassed in favour of a unix socket that is not mounted: every scan
+  ends with "Cannot create Docker client".
+- **`max_tags` must be 1 for an exactly-pinned image.** With a larger window
+  Diun reports every tag in it, including versions older than the one running,
+  each reading as an invitation to downgrade.
+- **`watch_repo` on a rolling tag is wrong.** Its digest is already watched;
+  the labels only add a card per tag in the window. On one host that produced
+  twenty cards in a minute.
+- **A shell pipeline cannot begin a line with `|`.** The webhook sink's command
+  was first written across a folded YAML scalar with the pipes leading each
+  continuation line. It died instantly, restarted forever, and dropped out of
+  Docker's DNS as it went — so Diun reported "no such host" for the sink, which
+  reads like a network problem and was a shell one. The command is one line
+  now, in exec form.
+- **The sink serves one connection at a time.** BusyBox `nc` has no
+  concurrency, and the first scan posts one notification per image within the
+  same second, so the rest are refused while it restarts between accepts. That
+  is the instrument's limit rather than a defect in delivery, and the test
+  asserts what it can honestly assert: a POST arrived, and it was JSON.
+- **The healthcheck is a subcommand, not a flag.** `diun healthcheck`;
+  `diun --healthcheck` is what people write and it is not a thing.
+
+[Unreleased]: https://github.com/heyvaldemar/diun-docker-compose/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/heyvaldemar/diun-docker-compose/releases/tag/v1.0.0

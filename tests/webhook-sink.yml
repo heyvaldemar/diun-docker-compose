@@ -1,0 +1,71 @@
+# A webhook receiver, for proving that notifications actually leave the
+# building.
+#
+# This is the test everybody skips. A notifier that discovers updates and
+# cannot deliver them is indistinguishable, from the outside, from one that
+# found nothing — both are silent, and silence is what you expect most days.
+# The first time you learn the difference is the day it mattered.
+#
+# So: a container that accepts a POST and writes the body to its log, Diun
+# pointed at it, and first-check notification turned on so the very first scan
+# has something to say. The test then asserts the sink received a message that
+# names Diun.
+#
+#   docker compose \
+#     -f diun-docker-compose.yml \
+#     -f tests/webhook-sink.yml \
+#     -p diun up -d
+#
+# Not for production. It has no authentication, keeps nothing, and exists only
+# to be asked "did anything arrive?".
+#
+# IT SERVES ONE CONNECTION AT A TIME. BusyBox nc has no concurrency, and the
+# first scan posts one notification per discovered image within the same
+# second - so the first arrives and the rest are refused while nc is restarting
+# between accepts. Diun logs those refusals, and they are the instrument's
+# limit rather than a defect in the delivery path. The test asserts that a POST
+# arrived, which is the question worth asking: a notifier that discovers
+# updates and cannot deliver them is, from the outside, indistinguishable from
+# one that found nothing.
+services:
+  webhook-sink:
+    image: ${DIUN_BACKUPS_IMAGE_TAG:-alpine:${DIUN_BACKUPS_IMAGE_VERSION:-3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce}}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+          cpus: "0.5"
+        reservations:
+          memory: 8m
+          cpus: "0.1"
+    # BusyBox nc, one request at a time, in a loop. A real HTTP server would be
+    # a second language in this repository for no gain: the assertion is "a
+    # POST arrived and it mentions Diun", and nc can answer that.
+    #
+    # Written on ONE line deliberately. A shell pipeline continues across lines
+    # only when the `|` ENDS the previous one - a line that begins with `|` is
+    # a syntax error. Split across a folded scalar, this loop died instantly,
+    # restarted forever, and dropped out of Docker's DNS as it went; Diun then
+    # reported "no such host" for the sink, which reads like a network problem
+    # and is a shell one.
+    command: ["sh", "-c", "while true; do printf 'HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok' | nc -l -p 9000 -w 5 | tr -d '\r' | sed 's/^/SINK /'; done"]
+    networks:
+      - diun-network
+    restart: unless-stopped
+
+  diun:
+    environment:
+      # The whole point of the sink.
+      DIUN_WEBHOOK_URL: http://webhook-sink:9000/hook
+      # Every minute, and tell me about the first scan: without both of these
+      # the test would wait until tomorrow morning for a message that, by
+      # design, is not sent about images seen for the first time.
+      DIUN_WATCH_SCHEDULE: "*/1 * * * *"
+      DIUN_WATCH_FIRSTCHECKNOTIF: "true"
+    depends_on:
+      webhook-sink:
+        condition: service_started

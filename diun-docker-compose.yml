@@ -1,0 +1,218 @@
+# Image pins live HERE, as interpolation defaults, so `git pull` (or
+# re-downloading this file) delivers the exact version combination this
+# repository has tested — no .env editing required. Setting the matching
+# variable in .env overrides the default for anyone who wants to pin
+# differently; .env itself carries only secrets and deliberate overrides.
+# CI (Trivy scans, check-pin-freshness, the ephemeral test .env) reads
+# the pins from these lines — this block is the single source of truth.
+x-images:
+  diun: &diun-image ${DIUN_IMAGE_TAG:-ghcr.io/crazy-max/diun:${DIUN_IMAGE_VERSION:-4.33.0@sha256:e324b793eb32dfb7f74d3a39421ebf090141caaadee69b8f78da63112408ee25}}
+  dockerproxy: &dockerproxy-image ${DIUN_DOCKERPROXY_IMAGE_TAG:-ghcr.io/tecnativa/docker-socket-proxy:${DIUN_DOCKERPROXY_IMAGE_VERSION:-v0.5.0@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459}}
+  backups: &backups-image ${DIUN_BACKUPS_IMAGE_TAG:-alpine:${DIUN_BACKUPS_IMAGE_VERSION:-3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce}}
+
+networks:
+  diun-network:
+    external: true
+
+volumes:
+  diun-data:
+  diun-data-backups:
+
+services:
+  # The ONLY container here that touches the Docker socket.
+  #
+  # Diun's job is to read what you are running and tell you when a newer image
+  # exists. It never pulls, never recreates, never restarts — notify-only by
+  # design. So it has no business holding a socket that could do any of those,
+  # and `:ro` on a socket mount would not stop it: the Docker API is
+  # root-equivalent whichever way the file is mounted, because the privilege is
+  # in what the API can do rather than in who can write the socket file.
+  #
+  # With POST denied, a compromised Diun can read container and image metadata
+  # and cannot start, stop, delete, build or exec anything at all.
+  dockerproxy:
+    image: *dockerproxy-image
+    # Hardening: no privilege escalation via setuid binaries
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits as .env-overridable defaults; the override survives every
+    # git pull.
+    deploy:
+      resources:
+        limits:
+          memory: ${DIUN_DOCKERPROXY_MEMORY_LIMIT:-64m}
+          cpus: "${DIUN_DOCKERPROXY_CPU_LIMIT:-0.5}"
+        reservations:
+          memory: ${DIUN_DOCKERPROXY_MEMORY_RESERVATION:-16m}
+          cpus: "${DIUN_DOCKERPROXY_CPU_RESERVATION:-0.1}"
+    environment:
+      # Both of these are needed, and the second is the one people leave out.
+      # Diun lists containers to find out what is running, and then INSPECTS
+      # EACH IMAGE to learn the digest it is pinned to. Without IMAGES it lists
+      # everything successfully, gets a 403 on every inspect, and reports "No
+      # image found" — a stack that looks alive and watches nothing.
+      CONTAINERS: 1
+      IMAGES: 1
+      # POST=0 is what makes this read-only, and there is no override file that
+      # turns it on. Diun does not act on anything; that is the entire design.
+      POST: 0
+      EVENTS: 1
+      PING: 1
+      VERSION: 1
+      # Pinned to their defaults rather than left unstated, so the posture is
+      # auditable by reading this file instead of the image's documentation.
+      INFO: 0
+      NETWORKS: 0
+      VOLUMES: 0
+      SERVICES: 0
+      TASKS: 0
+      EXEC: 0
+      SECRETS: 0
+      SYSTEM: 0
+      AUTH: 0
+      BUILD: 0
+      COMMIT: 0
+      CONFIGS: 0
+      DISTRIBUTION: 0
+      NODES: 0
+      PLUGINS: 0
+      SESSION: 0
+      SWARM: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - diun-network
+    restart: unless-stopped
+
+  diun:
+    image: *diun-image
+    command: serve
+    # Hardening: no privilege escalation via setuid binaries
+    security_opt:
+      - no-new-privileges:true
+    # One Go binary that reads a TCP endpoint, queries registries and posts a
+    # webhook. No Linux capability is needed for any of that.
+    cap_drop:
+      - ALL
+    # Diun keeps a small database of what it has already seen. A kill during a
+    # write leaves it to be recovered on the next start.
+    stop_grace_period: ${DIUN_STOP_GRACE_PERIOD:-60s}
+    # Resource limits as .env-overridable defaults; the override survives every
+    # git pull. What moves these is the number of images to check, and only
+    # while a scan is running.
+    deploy:
+      resources:
+        limits:
+          memory: ${DIUN_MEMORY_LIMIT:-256m}
+          cpus: "${DIUN_CPU_LIMIT:-1.0}"
+        reservations:
+          memory: ${DIUN_MEMORY_RESERVATION:-32m}
+          cpus: "${DIUN_CPU_RESERVATION:-0.1}"
+    volumes:
+      # What Diun has already seen. Losing it means the next scan treats every
+      # image as new; with FIRSTCHECKNOTIF false that is quiet, and with it
+      # true it is one message per image.
+      - diun-data:/data
+    environment:
+      TZ: ${DIUN_TZ:-Etc/UTC}
+      DIUN_DB_PATH: /data/diun.db
+      DIUN_LOG_LEVEL: ${DIUN_LOG_LEVEL:-info}
+      # When to check. Daily rather than hourly on purpose: a new image is not
+      # an emergency, and a notifier that interrupts you is one you turn off.
+      DIUN_WATCH_SCHEDULE: ${DIUN_WATCH_SCHEDULE:-0 8 * * *}
+      # Do NOT notify for images seen for the first time. With watch-by-default
+      # below, the first scan discovers everything you run at once, and `true`
+      # empties all of it into your chat in one go. Diun still records them;
+      # only real changes notify afterwards.
+      DIUN_WATCH_FIRSTCHECKNOTIF: ${DIUN_WATCH_FIRSTCHECKNOTIF:-false}
+      DIUN_PROVIDERS_DOCKER: "true"
+      # Not a socket path. Diun's own setting, and it has to be this one:
+      # DOCKER_HOST is ignored, so a proxy configured that way is silently
+      # bypassed in favour of a unix socket that is not mounted, and every scan
+      # ends with "Cannot create Docker client".
+      DIUN_PROVIDERS_DOCKER_ENDPOINT: tcp://dockerproxy:2375
+      # WATCH EVERYTHING BY DEFAULT, and this is the single most important line
+      # in the file. The opposite - opt in per container with diun.enable=true -
+      # is what upstream defaults to, and it means a new stack is unwatched
+      # until somebody remembers to label it. Nobody remembers. Watching by
+      # default means coverage starts the moment a container does; exclude a
+      # noisy one with `diun.enable=false` on that container.
+      DIUN_PROVIDERS_DOCKER_WATCHBYDEFAULT: ${DIUN_WATCH_BY_DEFAULT:-true}
+      # Where to send it. The slack notifier speaks the Slack incoming-webhook
+      # format, which Mattermost, Rocket.Chat and Discord (with /slack on the
+      # URL) all accept - so one variable covers most of what people use.
+      # See .env.example for the others Diun supports.
+      DIUN_NOTIF_SLACK_WEBHOOKURL: ${DIUN_WEBHOOK_URL:?set in .env - see .env.example}
+      DIUN_NOTIF_SLACK_RENDERFIELDS: ${DIUN_NOTIF_RENDERFIELDS:-false}
+    networks:
+      - diun-network
+    healthcheck:
+      # A subcommand, not a flag. `diun --healthcheck` is what people write and
+      # it is not a thing.
+      test: ["CMD", "diun", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      dockerproxy:
+        condition: service_started
+
+  backups:
+    # A plain alpine: /data is one small database, so the loop needs tar and
+    # nothing else.
+    image: *backups-image
+    # Hardening: no privilege escalation via setuid binaries
+    security_opt:
+      - no-new-privileges:true
+    # Drop every Linux capability; add back only what this container needs to
+    # write archives it owns.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+    # Resource limits as .env-overridable defaults; the override survives every
+    # git pull.
+    deploy:
+      resources:
+        limits:
+          memory: ${DIUN_BACKUPS_MEMORY_LIMIT:-256m}
+          cpus: "${DIUN_BACKUPS_CPU_LIMIT:-0.5}"
+        reservations:
+          memory: ${DIUN_BACKUPS_MEMORY_RESERVATION:-16m}
+          cpus: "${DIUN_BACKUPS_CPU_RESERVATION:-0.1}"
+    command: >-
+      sh -c 'sleep "$$BACKUP_INIT_SLEEP";
+      while true; do
+        STAMP="$$(date +%Y-%m-%d_%H-%M)";
+        DATA_FILE="$$DATA_BACKUPS_PATH/$$DATA_BACKUP_NAME-$$STAMP.tar.gz";
+        echo "[$$(date -Iseconds)] Starting data backup to $$DATA_FILE";
+        tar -zcpf "$$DATA_FILE.partial" $$DATA_PATH; RC=$$?;
+        if { [ "$$RC" -eq 0 ] || [ "$$RC" -eq 1 ]; } && tar -tzf "$$DATA_FILE.partial" > /dev/null 2>&1; then
+          mv "$$DATA_FILE.partial" "$$DATA_FILE";
+          echo "[$$(date -Iseconds)] Data backup OK: $$DATA_FILE ($$(stat -c %s "$$DATA_FILE") bytes)$$([ "$$RC" -eq 1 ] && echo " - some files changed while being read")";
+        else
+          echo "[$$(date -Iseconds)] Data backup FAILED - partial file kept as $$DATA_FILE.failed for diagnosis" >&2;
+          mv "$$DATA_FILE.partial" "$$DATA_FILE.failed" 2>/dev/null || true;
+        fi;
+        if [ "$${DATA_BACKUP_PRUNE_DAYS:-0}" -ge 1 ]; then
+          find "$$DATA_BACKUPS_PATH" -type f -name "$$DATA_BACKUP_NAME-*" -mtime "+$$DATA_BACKUP_PRUNE_DAYS" -delete;
+        fi;
+        sleep "$$BACKUP_INTERVAL";
+      done'
+    volumes:
+      - diun-data:${DATA_PATH:-/data}
+      - diun-data-backups:${DATA_BACKUPS_PATH:-/srv/diun-data/backups}
+    environment:
+      BACKUP_INIT_SLEEP: ${BACKUP_INIT_SLEEP:-30m}
+      BACKUP_INTERVAL: ${BACKUP_INTERVAL:-24h}
+      DATA_BACKUP_PRUNE_DAYS: ${DATA_BACKUP_PRUNE_DAYS:-7}
+      DATA_BACKUPS_PATH: ${DATA_BACKUPS_PATH:-/srv/diun-data/backups}
+      DATA_PATH: ${DATA_PATH:-/data}
+      DATA_BACKUP_NAME: ${DATA_BACKUP_NAME:-diun-data-backup}
+    networks:
+      - diun-network
+    restart: unless-stopped
