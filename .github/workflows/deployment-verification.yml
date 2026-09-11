@@ -267,21 +267,30 @@ jobs:
         # the allow-list it lists everything successfully, gets a 403 on every
         # inspect, and logs "No image found" - a stack that is healthy, running,
         # and watching nothing at all.
+        #
+        # This waits for a scan that FOUND something rather than judging the
+        # first one. Diun scans once the moment it starts, which on a stack
+        # coming up together can beat the proxy to readiness: the first run of
+        # this job saw `added=0 failed=0`, meaning it had scanned nothing at
+        # all, and called that a defect. A scan that races container startup is
+        # expected; a stack that never discovers anything is not.
         run: |
           dc() { docker compose -p "$COMPOSE_PROJECT_NAME" "$@"; }
-          # shellcheck disable=SC2016
-          timeout 6m bash -c 'until docker compose -p "$COMPOSE_PROJECT_NAME" logs diun 2>/dev/null | grep -q "Jobs completed"; do
-            echo "Waiting for the first scan..."; sleep 10
-          done'
-          dc logs diun | sed "s/\x1b\[[0-9;]*m//g" | grep -m1 "Jobs completed"
-          if dc logs diun | grep -q "No image found"; then
-            echo "::error::Diun found no images - the proxy allow-list is too tight (IMAGES is the usual one)"
-            dc logs diun | sed "s/\x1b\[[0-9;]*m//g" | grep -m3 -i "cannot inspect"
+          strip() { sed "s/\x1b\[[0-9;]*m//g"; }
+          added=0
+          for _ in $(seq 1 36); do
+            added=$(dc logs diun 2>/dev/null | strip | grep -oE "added=[0-9]+" | cut -d= -f2 | sort -rn | head -1)
+            [ "${added:-0}" -gt 0 ] && break
+            echo "Waiting for a scan that finds something..."
+            sleep 10
+          done
+          dc logs diun | strip | grep "Jobs completed" | tail -2
+          if [ "${added:-0}" -eq 0 ]; then
+            echo "::error::no scan ever discovered an image"
+            dc logs diun | strip | grep -m3 -iE "no image found|cannot inspect|cannot create docker client" || true
             exit 1
           fi
-          added=$(dc logs diun | sed "s/\x1b\[[0-9;]*m//g" | grep -m1 -oE "added=[0-9]+" | cut -d= -f2)
-          echo "images discovered on the first scan: ${added:-0}"
-          [ "${added:-0}" -gt 0 ] || { echo "::error::the first scan added no images"; exit 1; }
+          echo "images discovered: $added"
 
       - name: A notification actually leaves the building
         # The test nobody writes. A notifier that discovers updates and cannot

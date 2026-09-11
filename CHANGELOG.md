@@ -57,6 +57,12 @@ No Traefik and no certificate: Diun has no web interface.
   watching nothing. Found by pointing the first draft at a proxy and reading
   what Diun made of it rather than what the proxy answered. CI asserts the
   discovery count is greater than zero for exactly this reason.
+- **The first scan runs the instant Diun starts, and can beat the proxy to
+  readiness.** On a stack coming up together that produces `added=0 failed=0` —
+  a scan that found nothing because there was nothing to talk to yet. The first
+  CI run judged that first scan and called it a defect. The check waits for a
+  scan that discovers something instead: racing startup is expected, never
+  discovering anything is not.
 - **Diun ignores `DOCKER_HOST`.** Its own setting is
   `DIUN_PROVIDERS_DOCKER_ENDPOINT`, and a proxy configured the other way is
   silently bypassed in favour of a unix socket that is not mounted: every scan
