@@ -46,20 +46,38 @@ services:
     # a second language in this repository for no gain: the assertion is "a
     # POST arrived and it mentions Diun", and nc can answer that.
     #
-    # NO -w HERE, DELIBERATELY. A listen timeout counts from the moment nc
-    # starts listening, not from the moment a connection arrives, so a
-    # notification that lands late in the window is cut off part way through
-    # being read: the request line reaches the log and the headers never do.
-    # The loop restarts nc anyway, and the CI step has its own timeout, so the
-    # only thing -w added was a way to truncate the evidence.
+    # THE REQUEST IS PRINTED BY A SHELL READ LOOP, NOT BY `tr | sed`. That
+    # matters, and it took a raw capture to see why. nc receives the whole
+    # request: teeing its output to a file gave all 669 bytes of Diun's POST,
+    # headers and body, and running the old `tr -d '\r' | sed 's/^/SINK /'`
+    # over that file printed every line. Yet live, with nc still holding the
+    # pipe open, the container log carried the request line and nothing else,
+    # so the test looked for a Content-Type that had arrived and been swallowed
+    # between two processes. A read loop writes each line as it reads it and
+    # the whole request reaches the log.
     #
-    # Written on ONE line deliberately. A shell pipeline continues across lines
-    # only when the `|` ENDS the previous one - a line that begins with `|` is
-    # a syntax error. Split across a folded scalar, this loop died instantly,
-    # restarted forever, and dropped out of Docker's DNS as it went; Diun then
-    # reported "no such host" for the sink, which reads like a network problem
-    # and is a shell one.
-    command: ["sh", "-c", "while true; do printf 'HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok' | nc -l -p 9000 | tr -d '\r' | sed 's/^/SINK /'; done"]
+    # NO -w HERE EITHER. A listen timeout counts from the moment nc starts
+    # listening rather than from the moment a connection arrives, so it can cut
+    # an accepted request part way through. The loop restarts nc anyway and the
+    # CI step carries its own timeout.
+    command: ["sh", "-c", "while true; do printf 'HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok' | nc -l -p 9000 | while IFS= read -r line; do echo \"SINK $${line%$$(printf '\r')}\"; done; done"]
+    # THE LISTENER IS BOUND, not merely the container started. `depends_on:
+    # service_started` means the process was launched; Diun's first scan fires
+    # within a second of its own start and posts immediately, so it raced this
+    # container's nc to the port and lost. Every notification in that first
+    # burst was refused with "connection refused", and because a first check
+    # only happens once there was nothing to retry: the test then waited six
+    # minutes for a message that was never going to be sent again.
+    #
+    # netstat rather than a connection: probing a listener that serves one
+    # request at a time by connecting to it would consume the accept the real
+    # notification needs. This reads the socket without touching it.
+    healthcheck:
+      test: ["CMD-SHELL", "netstat -ltn | grep -q ':9000'"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 2s
     networks:
       - diun-network
     restart: unless-stopped
@@ -75,4 +93,6 @@ services:
       DIUN_WATCH_FIRSTCHECKNOTIF: "true"
     depends_on:
       webhook-sink:
-        condition: service_started
+        # Healthy, not started. See the healthcheck above for what that
+        # distinction cost.
+        condition: service_healthy

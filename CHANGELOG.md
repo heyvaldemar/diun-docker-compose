@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _(no unreleased changes yet)_
 
+## [1.0.2] - 2026-09-12
+
+### Fixed
+
+- **The delivery test, properly this time.** v1.0.1 claimed the cause and was
+  wrong, so the test went on failing. Two real faults, both found by capturing
+  what actually crossed the wire instead of reasoning about it.
+
+  Diun was posting before the sink could accept. `depends_on: service_started`
+  means the container was launched, not that anything is listening, and Diun's
+  first scan fires within a second of its own start. Every notification in that
+  burst came back "connection refused", and because a first check happens once
+  there was nothing to retry: the test then waited six minutes for a message
+  that would never be sent again. The sink now has a healthcheck and Diun waits
+  for `service_healthy`. The check reads the listening socket with `netstat`
+  rather than connecting to it, because connecting to a listener that serves
+  one request at a time consumes the accept the real notification needs.
+
+  And the accepted request was reaching the sink whole but not reaching the
+  log. Teeing nc's output to a file showed all 669 bytes of Diun's POST,
+  headers and body, and the old `tr -d '\r' | sed 's/^/SINK /'` printed every
+  line of that file. Live, with nc still holding the pipe open, only the
+  request line ever appeared, so the step looked for a `Content-Type` that had
+  arrived and been swallowed between two processes. A shell read loop writes
+  each line as it reads it, and the whole request reaches the log.
+
+  The `-w` removal from v1.0.1 stays. A listen timeout counts from the moment
+  nc starts listening rather than from the moment a connection arrives, so it
+  can cut an accepted request part way through. It was a real hazard; it was
+  not this one.
+
 ## [1.0.1] - 2026-09-11
 
 ### Fixed
@@ -106,6 +137,7 @@ No Traefik and no certificate: Diun has no web interface.
 - **The healthcheck is a subcommand, not a flag.** `diun healthcheck`;
   `diun --healthcheck` is what people write and it is not a thing.
 
-[Unreleased]: https://github.com/heyvaldemar/diun-docker-compose/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/heyvaldemar/diun-docker-compose/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/heyvaldemar/diun-docker-compose/releases/tag/v1.0.2
 [1.0.1]: https://github.com/heyvaldemar/diun-docker-compose/releases/tag/v1.0.1
 [1.0.0]: https://github.com/heyvaldemar/diun-docker-compose/releases/tag/v1.0.0
