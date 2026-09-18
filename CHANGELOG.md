@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_(no unreleased changes yet)_
+
+## [1.0.3] - 2026-09-18
+
 ### Security
 
 - **`alpine:3.22` was rebuilt upstream**; the pin moved from `sha256:14358309a308…` to `sha256:365499d9dccb…`. Same version, same tag, a rebuilt base image — the usual shape of a security fix in a base layer.
@@ -139,7 +143,8 @@ No Traefik and no certificate: Diun has no web interface.
 - **The healthcheck is a subcommand, not a flag.** `diun healthcheck`;
   `diun --healthcheck` is what people write and it is not a thing.
 
-[Unreleased]: https://github.com/heyvaldemar/diun-docker-compose/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/heyvaldemar/diun-docker-compose/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/heyvaldemar/diun-docker-compose/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/heyvaldemar/diun-docker-compose/releases/tag/v1.0.2
 [1.0.1]: https://github.com/heyvaldemar/diun-docker-compose/releases/tag/v1.0.1
 [1.0.0]: https://github.com/heyvaldemar/diun-docker-compose/releases/tag/v1.0.0
