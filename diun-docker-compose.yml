@@ -8,7 +8,7 @@
 x-images:
   diun: &diun-image ${DIUN_IMAGE_TAG:-ghcr.io/crazy-max/diun:${DIUN_IMAGE_VERSION:-4.33.0@sha256:e324b793eb32dfb7f74d3a39421ebf090141caaadee69b8f78da63112408ee25}}
   dockerproxy: &dockerproxy-image ${DIUN_DOCKERPROXY_IMAGE_TAG:-ghcr.io/tecnativa/docker-socket-proxy:${DIUN_DOCKERPROXY_IMAGE_VERSION:-v0.5.0@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459}}
-  backups: &backups-image ${DIUN_BACKUPS_IMAGE_TAG:-alpine:${DIUN_BACKUPS_IMAGE_VERSION:-3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce}}
+  backups: &backups-image ${DIUN_BACKUPS_IMAGE_TAG:-alpine:${DIUN_BACKUPS_IMAGE_VERSION:-3.22@sha256:365499d9dccb7c8cfaffef995a6c382e71174585e0556f6476ead1c5971c39fb}}
 
 networks:
   diun-network:
