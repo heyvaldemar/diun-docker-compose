@@ -121,6 +121,8 @@ chmod +x ./*.sh
 ./diun-restore-data.sh
 ```
 
+It lists the backups and asks, or takes a file name as its argument; it reads every path from the running backups container, and CI runs it on every push.
+
 ## Testing
 
 The [Deployment Verification](https://github.com/heyvaldemar/diun-docker-compose/actions/workflows/deployment-verification.yml?query=branch%3Amain) workflow runs on every push, pull request, and every day at 06:00 UTC: shellcheck and actionlint, Trivy scans of all three pinned images, a daily freshness check, and a deploy job that requires Diun to **discover images through the read-only proxy** (`added` greater than zero, and no `No image found`), **a notification to actually arrive**, the Diun container to have no Docker socket among its mounts, the proxy to answer `403` to a POST and `200` to a GET, eight backup and restore scenarios to pass, and Diun to come back healthy on the data directory the restore test replaced underneath it.

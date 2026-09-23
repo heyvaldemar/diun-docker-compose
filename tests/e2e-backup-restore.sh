@@ -185,9 +185,11 @@ test_restore_roundtrip() {
   echo "  baseline: $f"
   bk "rm -f ${MARKER}"
   bk "test ! -f ${MARKER}" || { echo "  the marker did not go away" >&2; return 1; }
-  docker stop "$APP_CONTAINER" > /dev/null
-  bk "rm -rf ${DATA_PATH:?}/* && tar -zxpf '$f' -C /"
-  docker start "$APP_CONTAINER" > /dev/null
+  # THE SHIPPED SCRIPT, NOT A COPY OF ITS COMMANDS: it stops and starts the
+  # application itself. This used to clear and unpack here, so the script a
+  # person runs was never the one that passed.
+  COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" ./diun-restore-data.sh "$(basename "$f")" > /dev/null \
+    || { echo "  ./diun-restore-data.sh failed" >&2; return 1; }
   bk "test -f ${MARKER}" || { echo "  the marker did not come back — the archive is not restorable" >&2; return 1; }
   bk "rm -f ${MARKER} ${BACKUPS_PATH}/.e2e-stamp"
   echo "  the marker came back — the backup is restorable"
