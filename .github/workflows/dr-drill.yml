@@ -32,6 +32,7 @@ jobs:
     env:
       NETWORK_ONE: diun-network
       DOCKER_COMPOSE_FILE: diun-docker-compose.yml
+      COMPOSE_PROJECT_NAME: diun
       APP_URL: ""
       APP_OK: "200|302|303"
       DB_ENGINE: ""
@@ -47,6 +48,8 @@ jobs:
       DB_RESTORE: ""
       DATA_RESTORE: "./diun-restore-data.sh \"$F\""
       DR_DIAG: ""
+      DR_IGNORE_SERVICES: ""
+      DR_KEEP: ""
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -71,6 +74,8 @@ jobs:
           echo "DR_FROM=$from" >> "$GITHUB_ENV"
           echo "the backup is taken on $from"
 
+      - name: Create the Docker network
+        run: docker network create "$NETWORK_ONE" || true
 
       - name: Generate test .env with ephemeral credentials
         # The real .env is gitignored. CI generates throwaway credentials so
@@ -118,6 +123,7 @@ jobs:
     env:
       NETWORK_ONE: diun-network
       DOCKER_COMPOSE_FILE: diun-docker-compose.yml
+      COMPOSE_PROJECT_NAME: diun
       APP_URL: ""
       APP_OK: "200|302|303"
       DB_ENGINE: ""
@@ -133,12 +139,37 @@ jobs:
       DB_RESTORE: ""
       DATA_RESTORE: "./diun-restore-data.sh \"$F\""
       DR_DIAG: ""
+      DR_IGNORE_SERVICES: ""
+      DR_KEEP: ""
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
+      - name: Create the Docker network
+        run: docker network create "$NETWORK_ONE" || true
+
+      - name: Generate test .env with ephemeral credentials
+        # The real .env is gitignored. CI generates throwaway credentials so
+        # `docker compose up` succeeds without committing secrets to the
+        # repo. No *_IMAGE_TAG values on purpose: the compose file's
+        # x-images defaults apply, so CI always tests exactly the pins the
+        # template ships to users who run it unmodified.
+        run: |
+          cat > .env <<EOF
+          # Overridden by tests/webhook-sink.yml, which points Diun at the sink.
+          # Present anyway because the compose file requires it: a notifier with
+          # nowhere to notify should not start.
+          DIUN_WEBHOOK_URL=http://webhook-sink:9000/hook
+          BACKUP_INIT_SLEEP=15s
+          BACKUP_INTERVAL=60s
+          EOF
+          # The media mount defaults to ./media; CI has no library, and an
+          # empty directory is the honest stand-in - it proves the mount works
+          # without pretending there is content to scan.
+          mkdir -p media
+          echo "Generated ephemeral .env for CI run"
 
 
       - name: The files kept off the dead host
