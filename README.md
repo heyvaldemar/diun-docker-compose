@@ -108,6 +108,23 @@ Three images pinned to `tag@sha256:<digest>` as interpolation defaults in the co
 
 There is a pleasing circularity here: this stack watches every pin in every other stack, and its own pins are watched by the same daily freshness check that guards the rest of the fleet. `git pull` alone delivers the tested combination; an `*_IMAGE_TAG` variable in `.env` overrides deliberately.
 
+### Verify what you deploy
+
+Every release from v1.0.5 on carries three files made on GitHub's runner with a short-lived identity and no stored key: `diun-docker-compose-<tag>.tar.gz`, a `git archive` of exactly the tree the tag points at; `diun-docker-compose-<tag>.tar.gz.sigstore.json`, a keyless [Sigstore](https://www.sigstore.dev/) signature over it; and `diun-docker-compose-<tag>.intoto.jsonl`, [SLSA](https://slsa.dev/) build provenance from the SLSA generator. To check them with nothing from this repository trusted:
+
+```bash
+cosign verify-blob diun-docker-compose-<tag>.tar.gz \
+  --bundle diun-docker-compose-<tag>.tar.gz.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/heyvaldemar/diun-docker-compose/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+slsa-verifier verify-artifact diun-docker-compose-<tag>.tar.gz \
+  --provenance-path diun-docker-compose-<tag>.intoto.jsonl \
+  --source-uri github.com/heyvaldemar/diun-docker-compose
+```
+
+Add `--source-tag <tag>` for a release published after 24 September 2026, which is signed by the run that published it. The five releases before that date were signed by a run started by hand on `main`, so their provenance names the branch, not the tag; the archive is still the tag's tree, and the signature still belongs to this repository's workflow. The workflow that makes them is [`release-assets.yml`](.github/workflows/release-assets.yml).
+
 ## Backups and restore
 
 The `backups` container archives `/data` on a loop — a 30-minute warm-up, a 24-hour interval, 7-day retention, all overridable in `.env`. That is one small database: what Diun has already seen.
