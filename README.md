@@ -1,6 +1,7 @@
 # Diun on Docker Compose
 
 [![Deployment Verification](https://github.com/heyvaldemar/diun-docker-compose/actions/workflows/deployment-verification.yml/badge.svg?branch=main)](https://github.com/heyvaldemar/diun-docker-compose/actions/workflows/deployment-verification.yml)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14919/badge)](https://www.bestpractices.dev/projects/14919)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 This repository deploys Diun — which watches the image tags of everything you are running and tells you when a newer one is published. It never pulls, never recreates, never restarts. Notify-only, by design.
