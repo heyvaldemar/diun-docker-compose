@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_(no unreleased changes yet)_
+
+## [1.0.10] - 2026-11-22
+
 ### Changed
 
 - **Diun 4.33.1 → 4.34.0** (`ghcr.io/crazy-max/diun:4.34.0`). Read by hand: the [v4.34.0 release notes](https://github.com/crazy-max/diun/releases/tag/v4.34.0) and the [v4.33 to v4.34 migration notes](https://github.com/crazy-max/diun/blob/v4.34.0/docs/migration/v4.33-to-v4.34.md) they point to, plus `internal/db` at both tags. What they mean here:
@@ -210,7 +214,8 @@ No Traefik and no certificate: Diun has no web interface.
 - **The healthcheck is a subcommand, not a flag.** `diun healthcheck`;
   `diun --healthcheck` is what people write and it is not a thing.
 
-[Unreleased]: https://github.com/heyvaldemar/diun-docker-compose/compare/v1.0.4...HEAD
+[Unreleased]: https://github.com/heyvaldemar/diun-docker-compose/compare/v1.0.10...HEAD
+[1.0.10]: https://github.com/heyvaldemar/diun-docker-compose/compare/v1.0.9...v1.0.10
 [1.0.4]: https://github.com/heyvaldemar/diun-docker-compose/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/heyvaldemar/diun-docker-compose/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/heyvaldemar/diun-docker-compose/releases/tag/v1.0.2
