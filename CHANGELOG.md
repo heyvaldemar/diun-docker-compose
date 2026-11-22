@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **`ghcr.io/crazy-max/diun:4.33.1` moved to `ghcr.io/crazy-max/diun:4.34.0`.** The freshness check reported the lag; the deploy job booted the stack on the new image before this landed.
+- **Diun 4.33.1 → 4.34.0** (`ghcr.io/crazy-max/diun:4.34.0`). Read by hand: the [v4.34.0 release notes](https://github.com/crazy-max/diun/releases/tag/v4.34.0) and the [v4.33 to v4.34 migration notes](https://github.com/crazy-max/diun/blob/v4.34.0/docs/migration/v4.33-to-v4.34.md) they point to, plus `internal/db` at both tags. What they mean here:
+  - The migration notes ask for one thing: `watchRepo` becomes `watchMode` (`true` → `all`, `false` → `tag`). This compose file sets neither; the README's label recipe for exact pins used `diun.watch_repo=true` and now says `diun.watch_mode=all`. The old label keeps working, with a deprecation warning.
+  - The database: the first start on 4.34.0 adds one bucket to `/data/diun.db` for each platform's manifest state (migration 3). Where that state is missing, Diun reads the history it already had, so images seen before the upgrade are not reported as new again. The backups service keeps copies of `/data` from before.
+  - The Slack notifier, which this template uses for any Slack-format webhook, moved to the `slack-go/slack` library. CI still requires a JSON POST to arrive at its test receiver.
+  - Also new: `watchMode: semver` for newer stable versions of an exactly pinned tag (the README names it), `assumeImmutableTags`, retries for transient registry errors, Matrix access tokens, custom ntfy headers. The 386 and `linux/arm/v5` images are gone. The image is now built on Go 1.27 and Alpine 3.24, and its user, entrypoint, command, volumes and health check are the same as 4.33.1's.
 
 ### Fixed
 
