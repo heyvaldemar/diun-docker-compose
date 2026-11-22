@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Diun 4.33.1 → 4.34.0** (`ghcr.io/crazy-max/diun:4.34.0`). Read by hand: the [v4.34.0 release notes](https://github.com/crazy-max/diun/releases/tag/v4.34.0) and the [v4.33 to v4.34 migration notes](https://github.com/crazy-max/diun/blob/v4.34.0/docs/migration/v4.33-to-v4.34.md) they point to, plus `internal/db` at both tags. What they mean here:
+  - The migration notes ask for one thing: `watchRepo` becomes `watchMode` (`true` → `all`, `false` → `tag`). This compose file sets neither; the README's label recipe for exact pins used `diun.watch_repo=true` and now says `diun.watch_mode=all`. The old label keeps working, with a deprecation warning.
+  - The database: the first start on 4.34.0 adds one bucket to `/data/diun.db` for each platform's manifest state (migration 3). Where that state is missing, Diun reads the history it already had, so images seen before the upgrade are not reported as new again. The backups service keeps copies of `/data` from before.
+  - The Slack notifier, which this template uses for any Slack-format webhook, moved to the `slack-go/slack` library. CI still requires a JSON POST to arrive at its test receiver.
+  - Also new: `watchMode: semver` for newer stable versions of an exactly pinned tag (the README names it), `assumeImmutableTags`, retries for transient registry errors, Matrix access tokens, custom ntfy headers. The 386 and `linux/arm/v5` images are gone. The image is now built on Go 1.27 and Alpine 3.24, and its user, entrypoint, command, volumes and health check are the same as 4.33.1's.
+
 ### Fixed
 
 - **An index pushed again over the same build is no longer reported as drift.** The daily pin check compared each pin with the digest the tag's index has now and failed on any difference, so a publisher re-pushing the index over the very same images (a platform added, an attestation rewritten) turned it red for an image nobody rebuilt, and no pin would ever move to turn it green. It now also compares the linux/amd64 build under both digests, the one CI runs and proves: the same build passes with a notice naming both digests, a new build fails as drift exactly as before, and a build that cannot be read still fails.

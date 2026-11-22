@@ -60,7 +60,7 @@ Add these four labels to that container:
 
 ```yaml
 labels:
-  - "diun.watch_repo=true"
+  - "diun.watch_mode=all"
   - "diun.sort_tags=semver"
   - "diun.max_tags=1"
   - "diun.include_tags=^v\\d+\\.\\d+\\.\\d+$$"
@@ -70,9 +70,11 @@ Three things about them, each learned the hard way:
 
 - **`max_tags=1` is not optional.** With a larger window you get a card for every tag in it — including versions *older* than the one you are running, each one reading as an invitation to downgrade.
 - **The regex must match that image's tag scheme.** Otherwise release candidates, betas and variant tags arrive alongside the releases.
-- **Do not add `watch_repo` to a container on a rolling tag.** Its digest is already watched; the labels only add a card per tag in the window. On one host that produced twenty cards in a minute.
+- **Do not add `watch_mode=all` to a container on a rolling tag.** Its digest is already watched; the labels only add a card per tag in the window. On one host that produced twenty cards in a minute.
 
 In compose files `$` must be doubled — `$$` — or Compose interpolates the regex before Diun ever sees it.
+
+`diun.watch_mode=all` is what Diun 4.34 calls the old `diun.watch_repo=true`. The old label still works, with a deprecation warning in the log; `watch_repo=false` is `watch_mode=tag`. Diun 4.34 also added `watch_mode=semver`, which looks only at stable versions newer than the pinned one, for exactly this case. It needs a full version in the tag (`1.5.0` or `v1.5.0`), and it reads a suffix like `-alpine` as a prerelease. See Diun's [watch modes](https://crazymax.dev/diun/config/defaults/#watchmode).
 
 ## Two statuses, and both need you
 
